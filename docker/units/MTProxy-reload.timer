@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily MTProxy restart (refresh Telegram DC config)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

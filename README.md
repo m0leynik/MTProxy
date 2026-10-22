@@ -104,6 +104,38 @@ systemctl status MTProxy.service
 systemctl enable MTProxy.service
 ```
 
-## Docker image
+## Docker
 Telegram is also providing [official Docker image](https://hub.docker.com/r/telegrammessenger/proxy/).
-Note: the image is outdated.
+Note: the image is outdated. To run *this* source tree in Docker, use the `Dockerfile` in the repo.
+
+### Build and run
+```bash
+docker build -t mtproxy .
+docker run -d --name mtproxy --restart unless-stopped -p 443:443 \
+  -e SECRET=$(head -c 16 /dev/urandom | xxd -ps) \
+  -e TAG="<proxy tag>" \
+  mtproxy
+```
+
+The container downloads `proxy-secret` and `proxy-multi.conf` on every start.
+Since the DC config changes occasionally, restart the container once per day
+(or use the systemd timer below). The client secret is passed via the `SECRET`
+environment variable and stays unchanged across restarts.
+
+### Run as a systemd service
+`docker/install-systemd.sh` builds the image, generates a client secret (stored
+in `/etc/mtproxy.env`, kept across restarts and installer re-runs) and installs:
+
+- `MTProxy.service` — runs the Docker container;
+- `MTProxy-reload.timer` — restarts the service daily at 04:00 to refresh
+  `proxy-multi.conf` (the binary cannot reload it while running).
+
+```bash
+sudo docker/install-systemd.sh
+systemctl status MTProxy
+systemctl list-timers MTProxy-reload.timer
+```
+
+To change settings later, edit `/etc/mtproxy.env` and run `systemctl restart
+MTProxy`. See `docker/install-systemd.sh --help` for all options (secret, tag,
+ports, workers, `--uninstall`, ...).

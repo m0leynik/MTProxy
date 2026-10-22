@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart MTProxy to refresh Telegram DC config (proxy-multi.conf)
+After=docker.service MTProxy.service
+
+[Service]
+Type=oneshot
+ExecStart=@SYSTEMCTL@ restart MTProxy.service
