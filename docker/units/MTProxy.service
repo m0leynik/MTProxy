@@ -13,6 +13,7 @@ ExecStart=@DOCKER@ run --rm --name mtproxy \
     -p ${HOST_PORT}:${CLIENT_PORT} \
     -e "SECRET=${SECRET}" \
     -e "TAG=${TAG}" \
+    -e "DOMAIN=${DOMAIN}" \
     -e "WORKERS=${WORKERS}" \
     -e "CLIENT_PORT=${CLIENT_PORT}" \
     -e "STATS_PORT=${STATS_PORT}" \

@@ -30,6 +30,8 @@ Options:
   --secret HEX      client secret: exactly 32 hex chars (a "dd" prefix goes
                     into the tg:// link, not here). [default: generated once]
   --tag TAG         proxy tag received from @MTProxybot
+  --domain DOMAIN   enable fake-TLS ("ee") mode for DOMAIN (e.g. example.com);
+                    prints an ee<secret><hex(domain)> client secret
   --workers N       number of worker processes (-M) [default: 1]
   --port N          client port inside the container (-H) [default: 443]
   --host-port N     published host port [default: same as --port]
@@ -53,6 +55,15 @@ rand_hex16() {
   fi
 }
 
+# hex-encode a string (used for the "ee" fake-TLS client secret)
+hex_encode() {
+  if command -v xxd >/dev/null 2>&1; then
+    printf '%s' "$1" | xxd -ps -c 200
+  else
+    printf '%s' "$1" | od -An -tx1 | tr -d ' \n'
+  fi
+}
+
 declare -A CLI=()
 UNINSTALL=0
 NO_BUILD=0
@@ -62,6 +73,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --secret)     CLI[SECRET]="$2"; shift 2 ;;
     --tag)        CLI[TAG]="$2"; shift 2 ;;
+    --domain)     CLI[DOMAIN]="$2"; shift 2 ;;
     --workers)    CLI[WORKERS]="$2"; shift 2 ;;
     --port)       CLI[CLIENT_PORT]="$2"; CLI[HOST_PORT]="$2"; shift 2 ;;
     --host-port)  CLI[HOST_PORT]="$2"; shift 2 ;;
@@ -94,6 +106,7 @@ SYSTEMCTL_BIN=$(command -v systemctl)
 # defaults
 SECRET=
 TAG=
+DOMAIN=
 WORKERS=1
 CLIENT_PORT=443
 HOST_PORT=443
@@ -134,6 +147,13 @@ done
   || die "--tag must be exactly 32 hex chars (the proxy tag from @MTProxybot)"
 [[ $IMAGE =~ ^[A-Za-z0-9._/@:-]+$ ]] \
   || die "--image must be a docker image reference (letters, digits, and . _ / @ : - only)"
+# DOMAIN enables fake-TLS ("ee") mode; it is written unescaped to /etc/mtproxy.env
+# and passed to mtproto-proxy via --domain, so keep it a plain hostname.
+[[ -z $DOMAIN || $DOMAIN =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] \
+  || die "--domain must be a hostname (letters, digits, dots, hyphens)"
+if [[ -n $DOMAIN && $WORKERS -ne 1 ]]; then
+  echo "warning: --domain enables TLS-transport mode; multiple workers are not recommended (replay protection); consider --workers 1" >&2
+fi
 
 if [[ $NO_BUILD -eq 0 ]]; then
   echo "building image '$IMAGE' from $REPO_ROOT ..."
@@ -146,6 +166,7 @@ cat > "$ENV_FILE" <<EOF
 # Edit and run: systemctl restart MTProxy
 SECRET=$SECRET
 TAG=$TAG
+DOMAIN=$DOMAIN
 WORKERS=$WORKERS
 CLIENT_PORT=$CLIENT_PORT
 HOST_PORT=$HOST_PORT
@@ -173,14 +194,36 @@ else
   fi
 fi
 
+DOMAIN_HEX=
+EE_SECRET=
+if [[ -n $DOMAIN ]]; then
+  DOMAIN_HEX=$(hex_encode "$DOMAIN")
+  EE_SECRET="ee${SECRET}${DOMAIN_HEX}"
+  echo "Use this secret in client: \"${EE_SECRET}\""
+fi
+
 cat <<EOF
 
 MTProxy is installed.
 
   client secret : $SECRET
   host port     : $HOST_PORT
+EOF
+
+if [[ -n $DOMAIN ]]; then
+  cat <<EOF
+  domain        : $DOMAIN
+  ee secret     : $EE_SECRET
+  ee share link : tg://proxy?server=YOUR_SERVER&port=$HOST_PORT&secret=$EE_SECRET
+EOF
+else
+  cat <<EOF
   share link    : tg://proxy?server=YOUR_SERVER&port=$HOST_PORT&secret=$SECRET
   with padding  : tg://proxy?server=YOUR_SERVER&port=$HOST_PORT&secret=dd$SECRET
+EOF
+fi
+
+cat <<EOF
 
 Next steps:
   1. Register the proxy with @MTProxybot and put the received tag into

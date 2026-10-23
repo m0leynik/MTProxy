@@ -12,6 +12,8 @@
 #                 padding) belongs in the tg:// client link only, mtproto-proxy
 #                 itself takes the bare 32 hex chars.
 #   TAG           optional proxy tag from @MTProxybot (-P)
+#   DOMAIN        optional: enable fake-TLS ("ee") mode for this hostname (-D);
+#                 clients then use the secret ee<SECRET><hex(DOMAIN)>
 #   CLIENT_PORT   client-facing port (-H), default 443
 #   STATS_PORT    stats port (-p), loopback-only inside the container, default 8888
 #   WORKERS       number of worker processes (-M), default 1
@@ -23,6 +25,7 @@ set -eu
 DATA_DIR="${DATA_DIR:-/opt/mtproxy}"
 SECRET="${SECRET:-}"
 TAG="${TAG:-}"
+DOMAIN="${DOMAIN:-}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
 CLIENT_PORT="${CLIENT_PORT:-443}"
 STATS_PORT="${STATS_PORT:-8888}"
@@ -68,10 +71,23 @@ set -- mtproto-proxy --http-stats -u nobody -p "$STATS_PORT" -H "$CLIENT_PORT" -
 if [ -n "$TAG" ]; then
   set -- "$@" -P "$TAG"
 fi
+if [ -n "$DOMAIN" ]; then
+  case "$DOMAIN" in
+    *[!A-Za-z0-9.-]*)
+      echo "error: DOMAIN contains invalid characters (expected a hostname)" >&2
+      exit 2 ;;
+  esac
+  # fake-TLS ("ee") mode: only accept TLS-transport for this domain
+  set -- "$@" --domain "$DOMAIN"
+fi
 if [ -n "$EXTRA_ARGS" ]; then
   # Intentional word splitting: EXTRA_ARGS holds several arguments.
   set -- "$@" $EXTRA_ARGS
 fi
 
-echo "starting mtproto-proxy: client port $CLIENT_PORT, stats on loopback port $STATS_PORT"
+if [ -n "$DOMAIN" ]; then
+  echo "starting mtproto-proxy (fake-TLS domain $DOMAIN): client port $CLIENT_PORT, stats on loopback port $STATS_PORT"
+else
+  echo "starting mtproto-proxy: client port $CLIENT_PORT, stats on loopback port $STATS_PORT"
+fi
 exec "$@" --aes-pwd proxy-secret proxy-multi.conf

@@ -122,6 +122,19 @@ Since the DC config changes occasionally, restart the container once per day
 (or use the systemd timer below). The client secret is passed via the `SECRET`
 environment variable and stays unchanged across restarts.
 
+### Fake-TLS ("ee") mode
+To make the proxy look like ordinary TLS traffic to a given domain, pass a
+domain. The server then runs in TLS-transport mode, and clients use the `ee`
+secret form: `ee<secret><hex(domain)>`.
+
+```bash
+sudo docker/install-systemd.sh --domain example.com
+```
+
+The installer prints the ready-to-use `ee…` secret and `tg://` link. For a
+plain `docker run`, add `-e DOMAIN=example.com`. Only TLS transport is served
+in this mode, and a single worker (`--workers 1`) is recommended.
+
 ### Run as a systemd service
 `docker/install-systemd.sh` builds the image, generates a client secret (stored
 in `/etc/mtproxy.env`, kept across restarts and installer re-runs) and installs:
@@ -138,4 +151,4 @@ systemctl list-timers MTProxy-reload.timer
 
 To change settings later, edit `/etc/mtproxy.env` and run `systemctl restart
 MTProxy`. See `docker/install-systemd.sh --help` for all options (secret, tag,
-ports, workers, `--uninstall`, ...).
+`--domain`, ports, workers, `--uninstall`, ...).
